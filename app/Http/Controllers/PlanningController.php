@@ -10,10 +10,13 @@ use App\Http\Requests\UpdatePlanningRequest;
 use Illuminate\Http\Request;
 use App\Http\Requests\StorePlanningRequest;
 use Inertia\Inertia;
+use Illuminate\Support\Carbon;
 use Maatwebsite\Excel\Facades\Excel;
 use Illuminate\Support\Facades\DB;
 use Barryvdh\DomPDF\Facade\Pdf;
 use Illuminate\Support\Str;
+use App\Models\Training;
+use App\Services\AutoSchedulerService;
 
 class PlanningController extends Controller
 {
@@ -29,10 +32,14 @@ class PlanningController extends Controller
             'plannings' => $plannings
         ]);
     }
+
     public function create()
     {
-        return Inertia::render('Plannings/Create');
+        return Inertia::render('Plannings/Create', [
+            'trainings' => Training::select('id', 'title', 'duration_hours', 'internship_weeks')->get()
+        ]);
     }
+
     public function edit(Planning $planning)
     {
         // On charge les phases pour pré-remplir le formulaire
@@ -83,62 +90,67 @@ class PlanningController extends Controller
         return to_route('plannings.index')
             ->with('success', 'Planning supprimé.');
     }
-    // public function store(Request $request)
+    // public function store(StorePlanningRequest $request)
     // {
-    //     $validated = $request->validate([
-    //         'title' => 'required|string',
-    //         'learner_name' => 'nullable|string',
-    //         'start_date' => 'required|date',
-    //         'end_date' => 'required|date|after:start_date',
-    //         'default_hours' => 'required|integer',
-    //         'phases' => 'array',
-    //         'phases.*.name' => 'required|string',
-    //         'phases.*.start_date' => 'required|date',
-    //         'phases.*.end_date' => 'required|date',
-    //         'phases.*.priority' => 'integer',
-    //     ]);
+    //     // 1. Récupération des données validées & propres
+    //     $data = $request->validated();
 
-    //     $planning = Planning::create([
-    //         'title' => $validated['title'],
-    //         'learner_name' => $validated['learner_name'],
-    //         'start_date' => $validated['start_date'],
-    //         'end_date' => $validated['end_date'],
-    //         'default_hours' => $validated['default_hours'],
-    //     ]);
-
-    //     foreach ($validated['phases'] ?? [] as $phase) {
-    //         $planning->phases()->create($phase);
-    //     }
-
-    //     return redirect()->route('plannings.show', $planning);
-    // }
-    public function store(StorePlanningRequest $request)
-    {
-        // 1. Récupération des données validées & propres
-        $data = $request->validated();
-
-        // 2. On utilise une transaction pour garantir l'intégrité des données
-        $planning = DB::transaction(function () use ($data) {
+    //     // 2. On utilise une transaction pour garantir l'intégrité des données
+    //     $planning = DB::transaction(function () use ($data) {
             
-            // On isole les phases et on les retire du tableau principal
-            // car la table 'plannings' ne connait pas la colonne 'phases'
-            $phases = $data['phases'] ?? [];
-            unset($data['phases']);
+    //         // On isole les phases et on les retire du tableau principal
+    //         // car la table 'plannings' ne connait pas la colonne 'phases'
+    //         $phases = $data['phases'] ?? [];
+    //         unset($data['phases']);
 
-            // Création du Planning
-            $planning = Planning::create($data);
+    //         // Création du Planning
+    //         $planning = Planning::create($data);
 
-            // Création des Phases (createMany est plus performant qu'une boucle)
-            if (!empty($phases)) {
-                $planning->phases()->createMany($phases);
-            }
+    //         // Création des Phases (createMany est plus performant qu'une boucle)
+    //         if (!empty($phases)) {
+    //             $planning->phases()->createMany($phases);
+    //         }
 
-            return $planning;
+    //         return $planning;
+    //     });
+
+    //     // 3. Redirection (Laravel 9+ syntaxe courte)
+    //     return to_route('plannings.show', $planning);
+    // }
+
+    public function store(Request $request, AutoSchedulerService $scheduler)
+    {
+        // Validation simplifiée
+        $validated = $request->validate([
+            'training_id' => 'required|exists:trainings,id',
+            'start_date' => 'required|date',
+        ]);
+
+        $training = Training::find($validated['training_id']);
+        $startDate = Carbon::parse($validated['start_date']);
+
+        // --- MAGIE AUTOMATIQUE ---
+        $computed = $scheduler->calculatePlanning(
+            $startDate, 
+            $training->duration_hours,
+            $training->internship_weeks
+        );
+
+        DB::transaction(function () use ($validated, $training, $computed) {
+            $planning = Planning::create([
+                'title' => $training->title, // On reprend le titre de la formation
+                'start_date' => $validated['start_date'],
+                'end_date' => $computed['end_date'], // Date calculée !
+                'default_hours' => 7, // FORCÉ À 7H
+            ]);
+
+            // Création des phases calculées
+            $planning->phases()->createMany($computed['phases']);
         });
 
-        // 3. Redirection (Laravel 9+ syntaxe courte)
-        return to_route('plannings.show', $planning);
+        return to_route('plannings.index')->with('success', 'Planning généré automatiquement !');
     }
+
     public function show(Planning $planning, PlanningGeneratorService $service)
     {
         $grid = $service->generateGrid($planning);
@@ -149,21 +161,6 @@ class PlanningController extends Controller
         ]);
     }
 
-    // public function export(Planning $planning, PlanningGeneratorService $service)
-    // {
-    //     $fileName = sprintf(
-    //         'Planning_%s_%s_%s_%s.xlsx',
-    //         \Str::slug($planning->learner_name ?? 'Apprenant'),
-    //         $planning->id,
-    //         $planning->start_date->format('Ymd'),
-    //         $planning->end_date->format('Ymd')
-    //     );
-
-    //     return Excel::download(
-    //         new ExportPlanningXlsxAction($planning, $service), 
-    //         $fileName
-    //     );
-    // }
     public function export(Planning $planning, PlanningGeneratorService $service)
     {
         // NOMMAGE : Planning_TITRE-FORMATION_YYYY-MM-DD.xlsx
@@ -178,6 +175,7 @@ class PlanningController extends Controller
             $fileName
         );
     }
+
     public function downloadPdf(Planning $planning, PlanningGeneratorService $service)
     {
         $grid = $service->generateGrid($planning);

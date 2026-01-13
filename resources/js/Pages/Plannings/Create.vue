@@ -1,17 +1,15 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
-import PhaseRepeater from '@/Components/PhaseRepeater.vue';
-import { PhCalendarPlus, PhSpinner } from '@phosphor-icons/vue';
+import { PhCalendarPlus, PhSpinner, PhMagicWand } from '@phosphor-icons/vue';
 import gsap from 'gsap';
 import { onMounted } from 'vue';
 
-// On retire learner_name de l'objet form
+// On reçoit la liste des formations
+const props = defineProps(['trainings']);
+
 const form = useForm({
-    title: '',
+    training_id: '',
     start_date: '',
-    end_date: '',
-    default_hours: 7,
-    phases: []
 });
 
 const submit = () => {
@@ -27,52 +25,51 @@ onMounted(() => {
 
 <template>
     <div class="min-h-screen bg-gray-50 py-10 px-4">
-        <div class="max-w-4xl mx-auto bg-white shadow-xl rounded-2xl overflow-hidden">
-            <div class="bg-blue-600 p-6 text-white flex items-center justify-between gsap-entry">
-                <div>
-                    <h1 class="text-2xl font-bold flex items-center gap-2">
-                        <PhCalendarPlus :size="32" /> Nouveau Planning
-                    </h1>
-                    <p class="text-blue-100 text-sm mt-1">Configurez les dates et les exceptions.</p>
-                </div>
+        <div class="max-w-xl mx-auto bg-white shadow-xl rounded-2xl overflow-hidden">
+            
+            <div class="bg-indigo-600 p-6 text-white gsap-entry">
+                <h1 class="text-2xl font-bold flex items-center gap-2">
+                    <PhMagicWand :size="32" /> Générateur Auto
+                </h1>
+                <p class="text-indigo-100 text-sm mt-1">
+                    Sélectionnez la formation, on s'occupe du reste (Stages, Noël, Révisions...).
+                </p>
             </div>
 
-            <form @submit.prevent="submit" class="p-8 space-y-8">
+            <form @submit.prevent="submit" class="p-8 space-y-6">
                 
-                <section class="gsap-entry">
-                    <h2 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Informations Générales</h2>
-                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <div class="md:col-span-2">
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Intitulé Formation</label>
-                            <input v-model="form.title" type="text" class="px-3 py-3 w-full border-gray-300 rounded-lg shadow-sm focus:ring-blue-500 focus:border-blue-500" placeholder="Ex: TITRE PRO COMPTABLE" required />
-                        </div>
-                        
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Date Début</label>
-                            <input v-model="form.start_date" type="date" class="px-3 py-3 w-full border-gray-300 rounded-lg shadow-sm" required />
-                        </div>
-                        <div>
-                            <label class="block text-sm font-medium text-gray-700 mb-1">Date Fin</label>
-                            <input v-model="form.end_date" type="date" class="px-3 py-3 w-full border-gray-300 rounded-lg shadow-sm" required />
-                        </div>
-                        <div>
-                             <label class="block text-sm font-medium text-gray-700 mb-1">Heures / jour (défaut)</label>
-                             <input v-model="form.default_hours" type="number" class="px-3 py-3 w-full border-gray-300 rounded-lg shadow-sm" />
-                        </div>
-                    </div>
-                </section>
+                <div class="gsap-entry">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Formation</label>
+                    <select v-model="form.training_id" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 h-12 text-lg" required>
+                        <option value="" disabled>-- Choisir une formation --</option>
+                        <option v-for="t in trainings" :key="t.id" :value="t.id">
+                            {{ t.title }} ({{ t.duration_hours }}h)
+                        </option>
+                    </select>
+                </div>
 
-                <section class="gsap-entry">
-                    <h2 class="text-lg font-semibold text-gray-800 border-b pb-2 mb-4">Exceptions & Phases</h2>
-                    <PhaseRepeater v-model="form.phases" />
-                </section>
+                <div class="gsap-entry">
+                    <label class="block text-sm font-bold text-gray-700 mb-2">Date de démarrage</label>
+                    <input v-model="form.start_date" type="date" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 h-12" required />
+                </div>
 
-                <div class="flex justify-end pt-6 border-t gsap-entry">
-                    <button type="submit" :disabled="form.processing" class="bg-blue-600 hover:bg-blue-700 text-white px-6 py-3 rounded-lg font-semibold shadow-lg transition-transform active:scale-95 flex items-center gap-2">
+                <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-blue-700 gsap-entry">
+                    <p class="font-bold mb-1">Règles appliquées automatiquement :</p>
+                    <ul class="list-disc list-inside space-y-1 ml-1 text-xs">
+                        <li>Journée type : 7h</li>
+                        <li>Stage : Après 4 mois</li>
+                        <li>Révisions : 2 dernières semaines</li>
+                        <li>Fermeture : Noël (23/12 - 05/01)</li>
+                    </ul>
+                </div>
+
+                <div class="pt-4 gsap-entry">
+                    <button type="submit" :disabled="form.processing" class="w-full bg-indigo-600 hover:bg-indigo-700 text-white px-6 py-4 rounded-xl font-bold shadow-lg transition-transform active:scale-95 flex items-center justify-center gap-2 text-lg">
                         <PhSpinner v-if="form.processing" class="animate-spin" />
-                        Générer le planning
+                        <span v-else>Générer le Planning</span>
                     </button>
                 </div>
+
             </form>
         </div>
     </div>
