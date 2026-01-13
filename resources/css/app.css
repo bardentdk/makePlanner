@@ -1,0 +1,17 @@
+@import "tailwindcss";
+
+@theme {
+    --color-primary-500: #3b82f6;
+    --color-primary-600: #2563eb;
+    --font-sans: 'Inter', sans-serif;
+}
+
+/* Transitions globales */
+.page-enter-active,
+.page-leave-active {
+  transition: opacity 0.3s ease;
+}
+.page-enter-from,
+.page-leave-to {
+  opacity: 0;
+}
