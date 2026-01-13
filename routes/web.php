@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\PlanningController;
+use App\Http\Controllers\TrainingController;
 
 Route::get('/', function () { return redirect('/plannings/create'); });
 
@@ -18,3 +19,5 @@ Route::put('/plannings/{planning}', [PlanningController::class, 'update'])->name
 
 // Suppression
 Route::delete('/plannings/{planning}', [PlanningController::class, 'destroy'])->name('plannings.destroy');
+// Ressources de formations
+Route::resource('trainings', TrainingController::class);
