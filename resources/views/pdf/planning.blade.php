@@ -7,7 +7,7 @@
         @page { margin: 5mm; }
         
         body {
-            font-family: Arial, sans-serif; /* Police Sheet/Excel */
+            font-family: Arial, sans-serif;
             font-size: 9px;
             color: #000;
         }
@@ -33,59 +33,42 @@
             text-align: center;
             height: 14px;
             vertical-align: middle;
-            /* Bordures internes fines et grises par défaut */
             border-bottom: 1px solid #ccc;
             border-right: 1px solid #ccc;
         }
 
-        /* --- BORDURES STRUCTURELLES (Effet Miroir) --- */
-        
-        /* Fin de mois (chaque 3ème colonne) : Bordure Droite Épaisse NOIRE */
+        /* BORDURES STRUCTURELLES */
         td:nth-child(3n), th:nth-child(3n) {
             border-right: 2px solid #000 !important;
         }
-        /* Début tableau : Bordure Gauche */
         td:first-child, th:first-child {
             border-left: 2px solid #000 !important;
         }
 
-        /* En-tête Mois */
         .month-header {
-            background-color: #A6A6A6; /* Gris moyen du modèle */
+            background-color: #A6A6A6;
             color: white;
             font-weight: bold;
             border-top: 2px solid #000;
             border-bottom: 2px solid #000;
-            /* Pas de bordure interne entre les 3 cellules fusionnées, géré par le colspan */
         }
 
-        /* Sous-titres (J / / C) */
         .sub-header {
-            border-bottom: 2px solid #000 !important; /* Séparation Tête/Corps épaisse */
+            border-bottom: 2px solid #000 !important;
             font-weight: bold;
             font-size: 8px;
         }
 
-        /* Cellules Contenu */
-        .weekend {
-            background-color: #D9D9D9 !important; /* Gris WE */
-        }
-        .empty-day {
-            background-color: #808080 !important; /* Gris foncé */
-        }
-        .content-cell {
-            font-weight: bold;
-            font-size: 8px;
-        }
+        .weekend { background-color: #D9D9D9 !important; }
+        .empty-day { background-color: #808080 !important; }
+        .content-cell { font-weight: bold; font-size: 8px; }
 
-        /* Largeurs */
         .col-day { width: 15px; }
         .col-letter { width: 15px; }
         .col-content { width: 25px; }
 
-        /* Totaux en bas */
         .total-row td {
-            border-top: 2px solid #000 !important; /* Séparation Corps/Pied épaisse */
+            border-top: 2px solid #000 !important;
         }
         .label-cell {
             text-align: right;
@@ -155,13 +138,14 @@
                 @endforeach
             </tr>
             
-            @foreach($phases as $phase)
+            @foreach($phases->unique('code') as $phase)
                 <tr>
                     @foreach($grid as $monthData)
                         <td colspan="2" class="label-cell">{{ substr($phase->name, 0, 10) }}</td>
                         <td style="font-weight:bold; border: 1px solid #000; background-color: {{ $phase->color }};">
                             @if($phase->code)
                                 @php
+                                    // On compte combien de fois CE code apparait dans le mois
                                     $cnt = collect($monthData['days'])->filter(fn($d) => $d->content === $phase->code)->count();
                                     $tot = $cnt * $phase->hours_per_day;
                                 @endphp
