@@ -4,10 +4,10 @@
     <meta charset="UTF-8">
     <title>Planning</title>
     <style>
-        @page { margin: 5mm; }
+        @page { margin: 5mm; } /* Marges fines */
         
         body {
-            font-family: Arial, sans-serif; /* Police Sheet/Excel */
+            font-family: Arial, Helvetica, sans-serif; /* Police "Sheet" */
             font-size: 9px;
             color: #000;
         }
@@ -29,46 +29,41 @@
         }
         
         th, td {
-            padding: 1px;
+            padding: 1px 2px; /* Padding très serré */
             text-align: center;
-            height: 14px;
+            height: 12px;
             vertical-align: middle;
-            /* Bordures internes fines et grises par défaut */
-            border-bottom: 1px solid #ccc;
+            border-bottom: 1px solid #ccc; /* Lignes internes grises fines */
             border-right: 1px solid #ccc;
         }
 
-        /* --- BORDURES STRUCTURELLES (Effet Miroir) --- */
-        
-        /* Fin de mois (chaque 3ème colonne) : Bordure Droite Épaisse NOIRE */
+        /* BORDURES STRUCTURELLES (Effet Miroir) */
+        /* Chaque 3ème colonne (fin de mois) a une bordure noire épaisse à droite */
         td:nth-child(3n), th:nth-child(3n) {
             border-right: 2px solid #000 !important;
         }
-        /* Début tableau : Bordure Gauche */
+        /* La première colonne (jours) a une bordure gauche */
         td:first-child, th:first-child {
             border-left: 2px solid #000 !important;
         }
 
-        /* En-tête Mois */
+        /* Largeurs */
+        .col-day { width: 15px; }
+        .col-letter { width: 15px; }
+        .col-content { width: 25px; }
+
+        /* Headers */
         .month-header {
-            background-color: #A6A6A6; /* Gris moyen du modèle */
-            color: white;
-            font-weight: bold;
             border-top: 2px solid #000;
             border-bottom: 2px solid #000;
-            /* Pas de bordure interne entre les 3 cellules fusionnées, géré par le colspan */
-        }
-
-        /* Sous-titres (J / / C) */
-        .sub-header {
-            border-bottom: 2px solid #000 !important; /* Séparation Tête/Corps épaisse */
             font-weight: bold;
-            font-size: 8px;
+            background-color: #fff; /* Souvent blanc dans les exports HTML bruts */
         }
-
-        /* Cellules Contenu */
+        
+        /* Cellules Spéciales */
         .weekend {
-            background-color: #D9D9D9 !important; /* Gris WE */
+            background-color: #D9D9D9 !important; /* Gris moyen Excel */
+            color: #000;
         }
         .empty-day {
             background-color: #808080 !important; /* Gris foncé */
@@ -78,22 +73,15 @@
             font-size: 8px;
         }
 
-        /* Largeurs */
-        .col-day { width: 15px; }
-        .col-letter { width: 15px; }
-        .col-content { width: 25px; }
-
         /* Totaux en bas */
         .total-row td {
-            border-top: 2px solid #000 !important; /* Séparation Corps/Pied épaisse */
+            border-top: 1px solid #000;
         }
         .label-cell {
             text-align: right;
             padding-right: 5px;
             font-weight: bold;
-            border-right: 1px solid #fff !important;
-            border-bottom: none !important;
-            border-left: none !important;
+            border-right: 1px solid #fff !important; /* Pas de ligne verticale sur la légende */
         }
     </style>
 </head>
@@ -111,11 +99,11 @@
                     <th colspan="3" class="month-header">{{ $monthData['month_label'] }}</th>
                 @endforeach
             </tr>
-            <tr>
+            <tr style="border-bottom: 2px solid #000;">
                 @foreach($grid as $monthData)
-                    <th class="sub-header col-day">J</th>
-                    <th class="sub-header col-letter"></th>
-                    <th class="sub-header col-content">C</th>
+                    <th>J</th>
+                    <th></th>
+                    <th>C</th>
                 @endforeach
             </tr>
         </thead>
@@ -123,7 +111,9 @@
             @for($day = 1; $day <= 31; $day++)
                 <tr>
                     @foreach($grid as $monthData)
-                        @php $dayDTO = collect($monthData['days'])->first(fn($d) => $d->date->day === $day); @endphp
+                        @php
+                            $dayDTO = collect($monthData['days'])->first(fn($d) => $d->date->day === $day);
+                        @endphp
 
                         @if($dayDTO)
                             @php $isWeekend = $dayDTO->type === 'weekend'; @endphp
@@ -146,11 +136,14 @@
             
             <tr><td colspan="{{ count($grid) * 3 }}" style="height:5px; border:none;"></td></tr>
 
-            <tr class="total-row">
+            <tr>
                 @foreach($grid as $monthData)
-                    <td colspan="2" class="label-cell">Total Heures</td>
+                    <td colspan="2" class="label-cell">Total</td>
                     <td style="font-weight:bold; border: 1px solid #000;">
-                        @php echo collect($monthData['days'])->filter(fn($d) => is_numeric($d->content))->sum('content'); @endphp
+                        @php
+                            $sum = collect($monthData['days'])->filter(fn($d) => is_numeric($d->content))->sum('content');
+                        @endphp
+                        {{ $sum }}
                     </td>
                 @endforeach
             </tr>
@@ -158,14 +151,14 @@
             @foreach($phases as $phase)
                 <tr>
                     @foreach($grid as $monthData)
-                        <td colspan="2" class="label-cell">{{ substr($phase->name, 0, 10) }}</td>
+                        <td colspan="2" class="label-cell">{{ substr($phase->name, 0, 5) }}</td>
                         <td style="font-weight:bold; border: 1px solid #000; background-color: {{ $phase->color }};">
                             @if($phase->code)
                                 @php
-                                    $cnt = collect($monthData['days'])->filter(fn($d) => $d->content === $phase->code)->count();
-                                    $tot = $cnt * $phase->hours_per_day;
+                                    $count = collect($monthData['days'])->filter(fn($d) => $d->content === $phase->code)->count();
+                                    $total = $count * $phase->hours_per_day;
                                 @endphp
-                                {{ $tot > 0 ? $tot : '' }}
+                                {{ $total > 0 ? $total : '' }}
                             @endif
                         </td>
                     @endforeach
