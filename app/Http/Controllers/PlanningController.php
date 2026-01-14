@@ -118,9 +118,9 @@ class PlanningController extends Controller
     //     return to_route('plannings.show', $planning);
     // }
 
+    // Dans la méthode store()
     public function store(Request $request, AutoSchedulerService $scheduler)
     {
-        // Validation simplifiée
         $validated = $request->validate([
             'training_id' => 'required|exists:trainings,id',
             'start_date' => 'required|date',
@@ -128,27 +128,28 @@ class PlanningController extends Controller
 
         $training = Training::find($validated['training_id']);
         $startDate = Carbon::parse($validated['start_date']);
-
-        // --- MAGIE AUTOMATIQUE ---
+        $rules = $training->scheduling_rules;
+        // --- MISE À JOUR ICI ---
         $computed = $scheduler->calculatePlanning(
             $startDate, 
             $training->duration_hours,
-            $training->internship_weeks
+            $training->internship_weeks,
+            $rules // On passe le tableau de règles
         );
+        // -----------------------
 
         DB::transaction(function () use ($validated, $training, $computed) {
             $planning = Planning::create([
-                'title' => $training->title, // On reprend le titre de la formation
+                'title' => $training->title,
                 'start_date' => $validated['start_date'],
-                'end_date' => $computed['end_date'], // Date calculée !
-                'default_hours' => 7, // FORCÉ À 7H
+                'end_date' => $computed['end_date'],
+                'default_hours' => 7,
             ]);
 
-            // Création des phases calculées
             $planning->phases()->createMany($computed['phases']);
         });
 
-        return to_route('plannings.index')->with('success', 'Planning généré automatiquement !');
+        return to_route('plannings.index')->with('success', 'Planning généré !');
     }
 
     public function show(Planning $planning, PlanningGeneratorService $service)
