@@ -58,11 +58,12 @@ class PlanningGeneratorService
                         'type' => 'phase'
                     ];
                 } else {
+                    // C'EST ICI : Jour de formation standard
                     $dayData = [
                         'date' => $date->copy(),
                         'dayLetter' => mb_substr($date->translatedFormat('D'), 0, 1),
                         'content' => $planning->default_hours,
-                        'color' => '#FFFFFF',
+                        'color' => '#dbeafe', // <--- BLEU CIEL (Blue-100 Tailwind)
                         'type' => 'standard'
                     ];
                 }

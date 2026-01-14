@@ -130,19 +130,16 @@ class ExportPlanningXlsxAction implements WithTitle, WithEvents
                         if ($dayDTO) {
                             $sheet->setCellValue("{$colDay}{$row}", $day);
                             $sheet->setCellValue("{$colLetter}{$row}", $dayDTO->dayLetter);
-                            // Le contenu est déjà vide si weekend grâce au Generator
-                            $sheet->setCellValue("{$colContent}{$row}", $dayDTO->content); 
+                            $sheet->setCellValue("{$colContent}{$row}", $dayDTO->content);
 
                             if ($dayDTO->type === 'weekend') {
-                                // GRIS CLAIR (#F2F2F2)
-                                // ARGB : FF + F2F2F2
+                                // Gris Clair
                                 $sheet->getStyle("{$colDay}{$row}:{$colContent}{$row}")
                                     ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB('FFF2F2F2');
-                                    
-                                // Optionnel : Si tu veux le texte (numéro du jour) en gris un peu plus foncé pour faire joli
-                                // $sheet->getStyle("{$colDay}{$row}:{$colContent}{$row}")->getFont()->setColor(new Color('FF999999'));
                             }
                             else if ($dayDTO->color && $dayDTO->color !== '#FFFFFF') {
+                                // Couleur Phase OU Couleur Standard (Bleu Ciel)
+                                // Le Generator envoie maintenant #dbeafe pour le standard, donc on rentre ici !
                                 $argb = $this->getArgb($dayDTO->color);
                                 $sheet->getStyle("{$colContent}{$row}")
                                     ->getFill()->setFillType(Fill::FILL_SOLID)->getStartColor()->setARGB($argb);
