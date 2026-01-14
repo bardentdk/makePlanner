@@ -2,50 +2,33 @@
 
 namespace App\Services;
 
+use App\Helpers\HolidayHelper;
 use Carbon\Carbon;
 use Carbon\CarbonPeriod;
 
 class AutoSchedulerService
 {
-    /**
-     * @param Carbon $startDate
-     * @param int $centerHours Heures de formation (Centre)
-     * @param int $totalInternshipWeeks Durée TOTALE des stages en semaines (legacy)
-     * @param array|null $rules Configuration spécifique (JSON)
-     */
     public function calculatePlanning(Carbon $startDate, int $centerHours, int $totalInternshipWeeks, ?array $rules = null): array
     {
         $phases = [];
         
-        // --- 1. LECTURE DES RÈGLES ---
+        // --- 1. CONFIGURATION ---
         $rules = $rules ?? [];
         $stagesCount = $rules['stages_count'] ?? 1;
-        $firstDelayMonths = $rules['first_stage_delay_months'] ?? 3.5; // Par défaut
+        $firstDelayMonths = $rules['first_stage_delay_months'] ?? 3.5;
         $gaps = $rules['gaps_between_stages_months'] ?? [];
 
-        // Calcul de la durée d'UN stage (Total / Nombre de stages)
-        // Ex: CIP 399h / 3 = 133h par stage
-        // On convertit en semaines : (TotalWeeks / Count)
         $weeksPerStage = $totalInternshipWeeks / $stagesCount;
 
-        // --- 2. PLACEMENT DES STAGES ---
-        
-        // A. Premier Stage
-        // On utilise addWeeks(months * 4.33) pour être plus précis que addMonths qui arrondit parfois mal les demis
+        // --- 2. STAGES ---
         $weeksDelay = $firstDelayMonths * 4.33; 
-        
         $currentStageStart = $startDate->copy()->addWeeks($weeksDelay);
         if ($currentStageStart->isWeekend()) $currentStageStart->next(Carbon::MONDAY);
         
-        // On sauvegarde le début du tout premier stage pour la "Recherche de stage"
         $firstStageDateForSearch = $currentStageStart->copy();
 
-        // Boucle pour créer les X stages
         for ($i = 0; $i < $stagesCount; $i++) {
-            
             $currentStageEnd = $currentStageStart->copy()->addWeeks($weeksPerStage)->subDay();
-            
-            // Si fin le WE, on ramène au vendredi
             if ($currentStageEnd->isWeekend()) $currentStageEnd->previous(Carbon::FRIDAY);
 
             $phases[] = [
@@ -58,51 +41,35 @@ class AutoSchedulerService
                 'priority' => 50,
             ];
 
-            // Calcul du début du PROCHAIN stage (s'il y en a un autre)
             if ($i < $stagesCount - 1) {
-                // On récupère l'intervalle spécifique pour ce trou (ou 1.5 mois par défaut)
                 $gapMonths = $gaps[$i] ?? 1.5;
-                $gapWeeks = $gapMonths * 4.33;
-                
-                // Le prochain démarre après la fin du précédent + gap
-                $currentStageStart = $currentStageEnd->copy()->addWeeks($gapWeeks);
+                $currentStageStart = $currentStageEnd->copy()->addWeeks($gapMonths * 4.33);
                 if ($currentStageStart->isWeekend()) $currentStageStart->next(Carbon::MONDAY);
             }
         }
 
-        // --- 3. CALCUL DE LA FIN DE FORMATION ---
-        
-        // La fin de formation est déterminée par le temps total "Heures Centre + Heures Stages + Trous"
-        // Le plus simple : On regarde la fin du dernier stage, et on ajoute le reste des heures de centre ?
-        // NON. Dans un TP alterné, la fin est souvent : Date Début + (Total Heures / 35).
-        // Mais avec des gros trous entre les stages, la date de fin réelle recule.
-        
-        // Approche Robuste : 
-        // On calcule la durée théorique totale en semaines (Centre + Stages)
+        // --- 3. CALCUL FIN ---
         $totalHours = $centerHours + ($totalInternshipWeeks * 35);
         $totalWeeks = ceil($totalHours / 35);
-        
-        // On ajoute les "Gaps" (trous entre stages) à la durée totale car ce sont des périodes actives (formation centre)
         $totalGapMonths = array_sum($gaps);
         $totalWeeks += ($totalGapMonths * 4.33);
 
-        // Date de fin brute
         $endDate = $startDate->copy()->addWeeks($totalWeeks);
-
-        // Ajustement Noel (Si on traverse le 25 déc)
+        
+        // Ajustement Noël
         $periodCheck = CarbonPeriod::create($startDate, $endDate);
         foreach ($periodCheck as $date) {
             if ($date->month == 12 && $date->day == 25) {
-                $endDate->addWeeks(2); // +2 semaines fermeture
+                $endDate->addWeeks(2);
                 break;
             }
         }
         if (!$endDate->isFriday()) $endDate->next(Carbon::FRIDAY);
 
 
-        // --- 4. AUTRES PHASES (Noël, Révisions, Recherche) ---
+        // --- 4. PHASES SPÉCIALES ---
 
-        // Fermeture Noël
+        // A. Fermeture Noël
         $startYear = $startDate->year;
         $endYear = $endDate->year;
         for ($y = $startYear; $y <= $endYear; $y++) {
@@ -121,7 +88,7 @@ class AutoSchedulerService
             }
         }
 
-        // Révisions (2 dernières semaines)
+        // B. Révisions
         $revisionEnd = $endDate->copy();
         $revisionStart = $endDate->copy()->subWeeks(2)->startOfWeek(); 
         $phases[] = [
@@ -130,11 +97,11 @@ class AutoSchedulerService
             'start_date' => $revisionStart->format('Y-m-d'),
             'end_date' => $revisionEnd->format('Y-m-d'),
             'hours_per_day' => 7,
-            'color' => '#bbf7d0', // Vert
+            'color' => '#bbf7d0',
             'priority' => 40,
         ];
 
-        // Recherche de Stage (Lundis avant le 1er stage)
+        // C. Recherche de Stage
         $searchPeriod = CarbonPeriod::create($startDate, $firstStageDateForSearch->subDay());
         foreach ($searchPeriod as $date) {
             if ($date->isMonday() && !$date->isSameDay($startDate)) {
@@ -144,9 +111,31 @@ class AutoSchedulerService
                     'start_date' => $date->format('Y-m-d'),
                     'end_date' => $date->format('Y-m-d'),
                     'hours_per_day' => 7,
-                    'color' => '#fb923c', // Orange
+                    'color' => '#fb923c',
                     'priority' => 45,
                 ];
+            }
+        }
+
+        // D. Jours Fériés (NOUVEAU)
+        $yearsToCheck = range($startDate->year, $endDate->year);
+        foreach ($yearsToCheck as $year) {
+            $holidays = HolidayHelper::getHolidays($year);
+            foreach ($holidays as $holiday) {
+                if ($holiday->between($startDate, $endDate)) {
+                    // On ne crée pas de phase fériée si c'est un WE (le générateur gérera le blanc)
+                    if ($holiday->isWeekend()) continue;
+
+                    $phases[] = [
+                        'name' => 'Férié',
+                        'code' => 'F',
+                        'start_date' => $holiday->format('Y-m-d'),
+                        'end_date' => $holiday->format('Y-m-d'),
+                        'hours_per_day' => 0,
+                        'color' => '#ef4444', // Rouge
+                        'priority' => 80, // > Stage (50)
+                    ];
+                }
             }
         }
 
