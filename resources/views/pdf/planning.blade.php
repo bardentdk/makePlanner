@@ -5,7 +5,7 @@
     <title>Planning</title>
     <style>
         @page { margin: 5mm; }
-        body { font-family: Arial, sans-serif; font-size: 9px; }
+        body { font-family: Arial, sans-serif; font-size: 9px; text-transform: uppercase!important}
         .header { text-align: center; margin-bottom: 15px; border: 1px solid #000; padding: 5px; background-color: #f9f9f9; }
         h1 { margin: 0; font-size: 14px; text-transform: uppercase; }
         h2 { margin: 3px 0 0; font-size: 11px; font-weight: normal; font-style: italic; }
