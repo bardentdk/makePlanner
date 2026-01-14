@@ -26,7 +26,7 @@ const isUrl = (...urls) => {
                 <div class="h-16 flex items-center px-6 border-b border-gray-100">
                     <div class="text-xl font-bold text-indigo-600 tracking-tight flex items-center gap-2">
                         <PhCalendarCheck weight="fill" :size="28" />
-                        <span>Australe<span class="text-gray-400"> Formation</span></span>
+                        <!-- <span>Australe<span class="text-gray-400">Formation</span></span> -->
                     </div>
                 </div>
 
