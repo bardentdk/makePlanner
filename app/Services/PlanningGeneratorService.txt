@@ -11,10 +11,16 @@ class PlanningGeneratorService
     public function generateGrid(Planning $planning): array
     {
         $grid = [];
+        
+        // On s'assure que start_date et end_date sont des objets Carbon
+        // (Au cas où le cast du modèle ne suffirait pas)
         $start = Carbon::parse($planning->start_date);
         $end = $planning->end_date ? Carbon::parse($planning->end_date) : $start->copy()->addMonths(6);
 
         $period = CarbonPeriod::create($start, $end);
+        
+        // On charge les phases triées par priorité (les Fériés écrasent les Cours, etc.)
+        // Eager loading pour éviter 300 requêtes SQL
         $phases = $planning->phases->sortByDesc('priority');
 
         foreach ($period as $date) {
@@ -27,54 +33,54 @@ class PlanningGeneratorService
                 ];
             }
 
+            // --- 1. GESTION WEEK-END ---
             if ($date->isWeekend()) {
                 $dayData = [
                     'date' => $date->copy(),
                     'dayLetter' => mb_substr($date->translatedFormat('D'), 0, 1),
                     'content' => '', 
-                    'hours' => 0,
-                    'raw_code' => '',
+                    'hours' => 0,      // <--- IMPORTANT
+                    'raw_code' => '',  // <--- IMPORTANT
                     'color' => '#F2F2F2', 
                     'type' => 'weekend'
                 ];
             } 
             else {
+                // --- 2. GESTION SEMAINE (PHASES) ---
                 $activePhase = null;
+                
+                // On cherche la phase qui correspond à ce jour
                 foreach ($phases as $phase) {
                     $pStart = Carbon::parse($phase->start_date);
                     $pEnd = Carbon::parse($phase->end_date);
+
                     if ($date->between($pStart, $pEnd)) {
                         $activePhase = $phase;
-                        break;
+                        break; // On a trouvé (grâce au tri par priorité), on arrête
                     }
                 }
 
                 if ($activePhase) {
-                    // --- LOGIQUE D'AFFICHAGE (Visuel vs Technique) ---
-                    $rawCode = $activePhase->code; // C, R, RS, S, F...
-                    $hours = (float)$activePhase->hours_per_day;
-
-                    // Décision : Qu'est-ce qu'on affiche dans la case ?
-                    // Si c'est Cours (C) ou Révisions (R) -> On affiche les HEURES (ex: 7)
-                    // Sinon (Stage S, Recherche RS, Férié F) -> On affiche le CODE (ex: RS)
-                    if ($hours > 0 && ($rawCode === 'C' || $rawCode === 'R')) {
-                        $displayContent = $hours;
-                    } else {
-                        $displayContent = $rawCode;
-                    }
-
+                    // C'EST ICI QUE LA MAGIE OPÈRE
                     $dayData = [
                         'date' => $date->copy(),
                         'dayLetter' => mb_substr($date->translatedFormat('D'), 0, 1),
                         
-                        'content' => $displayContent,    // Visuel (7, RS, S...)
-                        'raw_code' => $rawCode,          // Technique (R, C, RS...) -> Sert au PDF pour trier
-                        'hours' => $hours,               // Mathématique
+                        // Ce qu'on affiche dans la case (S, F, 7, 4...)
+                        'content' => $activePhase->code, 
+                        
+                        // Ce qui sert au CALCUL (chiffre pur : 7, 4, 3.5...)
+                        'hours' => (float)$activePhase->hours_per_day, 
+                        
+                        // Ce qui sert au TRI (S, C, RS, R...)
+                        'raw_code' => $activePhase->code, 
                         
                         'color' => $activePhase->color,
                         'type' => 'phase'
                     ];
                 } else {
+                    // Cas de sécurité (normalement impossible avec le Calcul Strict)
+                    // Si un jour n'a pas de phase, on le met vide ou standard
                     $dayData = [
                         'date' => $date->copy(),
                         'dayLetter' => mb_substr($date->translatedFormat('D'), 0, 1),
@@ -86,6 +92,7 @@ class PlanningGeneratorService
                     ];
                 }
             }
+
             $grid[$monthKey]['days'][] = (object)$dayData;
         }
 

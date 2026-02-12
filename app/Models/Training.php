@@ -3,9 +3,11 @@
 namespace App\Models;
 
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Factories\HasFactory;
 
 class Training extends Model
 {
+    use HasFactory;
     // Autorise l'insertion de toutes les données
     protected $guarded = [];
 

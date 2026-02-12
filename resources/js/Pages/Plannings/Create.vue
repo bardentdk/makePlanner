@@ -1,20 +1,38 @@
 <script setup>
 import { useForm } from '@inertiajs/vue3';
-import { PhCalendarPlus, PhSpinner, PhMagicWand } from '@phosphor-icons/vue';
+import { PhCalendarPlus, PhSpinner, PhMagicWand, PhSteps, PhClock } from '@phosphor-icons/vue';
 import AppLayout from '@/Layouts/AppLayout.vue';
 import gsap from 'gsap';
 import { onMounted } from 'vue';
 
-// On reçoit la liste des formations
+// 1. CORRECTION : On assigne les props à une variable pour les utiliser dans le script
 const props = defineProps(['trainings']);
 
 const form = useForm({
     training_id: '',
     start_date: '',
+    nombre_stages: 1,
+    heures_stage: 0, // Ce champ sera envoyé au Controller
 });
 
+// 2. LOGIQUE : Quand on change de formation, on calcule les heures par défaut
+const onTrainingSelect = () => {
+    // On cherche la formation sélectionnée dans la liste
+    const t = props.trainings.find(x => x.id === form.training_id);
+    
+    if (t) {
+        // On convertit les semaines en heures (Ex: 10 sem * 35 = 350h)
+        // L'utilisateur pourra modifier ce chiffre ensuite s'il veut 200h pile.
+        form.heures_stage = t.internship_weeks * 35; 
+    }
+};
+
 const submit = () => {
-    form.post(route('plannings.store'));
+    form.post(route('plannings.store'), {
+        onSuccess: () => {
+            // Optionnel : Reset ou notification
+        }
+    });
 };
 
 onMounted(() => {
@@ -42,26 +60,68 @@ onMounted(() => {
                     
                     <div class="gsap-entry">
                         <label class="block text-sm font-bold text-gray-700 mb-2">Formation</label>
-                        <select v-model="form.training_id" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 h-12 text-lg" required>
+                        <select 
+                            v-model="form.training_id" 
+                            @change="onTrainingSelect"
+                            class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 focus:border-indigo-500 h-12 text-lg" 
+                            required
+                        >
                             <option value="" disabled>-- Choisir une formation --</option>
                             <option v-for="t in trainings" :key="t.id" :value="t.id">
-                                {{ t.title }} ({{ t.duration_hours }}h)
+                                {{ t.title }} ({{ t.duration_hours }}h - {{ t.internship_weeks }} sem. stage)
                             </option>
                         </select>
+                        <p v-if="form.errors.training_id" class="text-red-500 text-xs mt-1">{{ form.errors.training_id }}</p>
                     </div>
 
                     <div class="gsap-entry">
-                        <label class="block text-sm font-bold text-gray-700 mb-2">Date de démarrage</label>
-                        <input v-model="form.start_date" type="date" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 h-12" required />
+                        <label class="block text-sm font-bold text-gray-700 mb-2">Date de début</label>
+                        <div class="relative">
+                            <input v-model="form.start_date" type="date" class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 h-12 pl-3" required />
+                        </div>
+                        <p v-if="form.errors.start_date" class="text-red-500 text-xs mt-1">{{ form.errors.start_date }}</p>
+                    </div>
+
+                    <div class="grid grid-cols-2 gap-4">
+                        
+                        <div class="gsap-entry">
+                            <label class="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-1">
+                                <PhSteps /> Nb. Périodes
+                            </label>
+                            <input 
+                                v-model="form.nombre_stages" 
+                                type="number" 
+                                min="0" 
+                                class="w-full border-gray-300 rounded-lg shadow-sm focus:ring-indigo-500 h-12" 
+                                required 
+                                placeholder="Ex: 1"
+                            />
+                            <p v-if="form.errors.nombre_stages" class="text-red-500 text-xs mt-1">{{ form.errors.nombre_stages }}</p>
+                        </div>
+
+                        <div class="gsap-entry">
+                            <label class="block text-sm font-bold text-gray-700 mb-2 flex items-center gap-1">
+                                <PhClock /> Total Heures Stage
+                            </label>
+                            <input 
+                                v-model="form.heures_stage" 
+                                type="number" 
+                                min="0" 
+                                class="w-full border-orange-300 bg-orange-50 text-orange-900 font-bold rounded-lg shadow-sm focus:ring-orange-500 h-12" 
+                                required 
+                            />
+                            <p class="text-xs text-gray-500 mt-1">Calculé auto. (35h/sem), modifiable.</p>
+                            <p v-if="form.errors.heures_stage" class="text-red-500 text-xs mt-1">{{ form.errors.heures_stage }}</p>
+                        </div>
+
                     </div>
 
                     <div class="bg-blue-50 p-4 rounded-lg border border-blue-100 text-sm text-blue-700 gsap-entry">
                         <p class="font-bold mb-1">Règles appliquées automatiquement :</p>
                         <ul class="list-disc list-inside space-y-1 ml-1 text-xs">
-                            <li>Journée type : 7h</li>
-                            <li>Stage : Après 4 mois</li>
-                            <li>Révisions : 2 dernières semaines</li>
-                            <li>Fermeture : Noël (23/12 - 05/01)</li>
+                            <li>Calcul strict basé sur les heures catalogue.</li>
+                            <li>Stages déduits automatiquement.</li>
+                            <li>Fériés et Weekends exclus.</li>
                         </ul>
                     </div>
 

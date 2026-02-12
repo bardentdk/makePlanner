@@ -116,25 +116,22 @@
                 </tr>
             @endfor
 
-            {{-- SÉPARATEUR AVANT LE PIED DE PAGE --}}
+            {{-- SÉPARATEUR --}}
             <tr>
                 <td colspan="{{ count($grid) * 3 + 1 }}" style="height:5px; border:none; border-top:2px solid #000;"></td>
             </tr>
 
-            {{-- 1. LIGNE : H. CENTRE (Total Bleu) --}}
-            {{-- Celle-ci englobe C + R + RS pour le total, car ce sont des heures payées centre --}}
+            {{-- PIED DE PAGE : TOTAL H. CENTRE (Bleu) --}}
             <tr>
                 @foreach($grid as $monthData)
                     <td colspan="2" class="footer-label">H. CENTRE</td>
                     <td class="footer-val bg-centre">
                         @php
-                            // On additionne TOUT ce qui est fait au centre (C, RS, R)
+                            // Somme mensuelle : Numérique + RS + R
                             $sum = collect($monthData['days'])->reduce(function($c, $d) {
+                                $h = $d->hours ?? 0;
                                 $code = $d->raw_code ?? $d->content;
-                                // Si c'est C, RS, R ou un chiffre -> On compte
-                                return (in_array($code, ['C', 'RS', 'R']) || is_numeric($d->content)) 
-                                       ? $c + ($d->hours ?? 0) 
-                                       : $c;
+                                return (in_array($code, ['C', 'RS', 'R']) || is_numeric($d->content)) ? $c + $h : $c;
                             }, 0);
                         @endphp
                         {{ $sum > 0 ? $sum : '' }}
@@ -150,46 +147,35 @@
                     <td colspan="2" class="footer-label">RÉVISIONS</td>
                     <td class="footer-val bg-revision">
                         @php
-                            // On filtre sur le code interne 'R' généré par le service
-                            $sum = collect($monthData['days'])
-                                ->where('raw_code', 'R')
-                                ->sum('hours');
+                            $sum = collect($monthData['days'])->where('raw_code', 'R')->sum('hours');
                         @endphp
                         {{ $sum > 0 ? $sum : '' }}
                     </td>
                 @endforeach
-                {{-- Pas de total global nécessaire ici selon votre demande --}}
                 <td style="background-color:#eee;">-</td>
             </tr>
 
-            {{-- 3. LIGNE : RECHERCHE (Mauve - Mensuel uniquement) --}}
+            {{-- LIGNE : RECHERCHE (Mauve) --}}
             <tr>
                 @foreach($grid as $monthData)
                     <td colspan="2" class="footer-label">RECHERCHE</td>
                     <td class="footer-val bg-recherche">
                         @php
-                            // On filtre STRICTEMENT sur le code 'RS'
-                            $sum = collect($monthData['days'])
-                                ->where('raw_code', 'RS')
-                                ->sum('hours');
+                            $sum = collect($monthData['days'])->where('raw_code', 'RS')->sum('hours');
                         @endphp
-                        {{-- Affichage du mensuel --}}
                         {{ $sum > 0 ? $sum : '' }}
                     </td>
                 @endforeach
-                {{-- Pas de total global demandé --}}
                 <td style="background-color:#eee;">-</td>
             </tr>
 
-            {{-- 4. LIGNE : STAGE (Rose) --}}
+            {{-- LIGNE : STAGE (Rose) --}}
             <tr>
                 @foreach($grid as $monthData)
                     <td colspan="2" class="footer-label">STAGE</td>
                     <td class="footer-val bg-stage">
                         @php
-                            $sum = collect($monthData['days'])
-                                ->where('raw_code', 'S')
-                                ->sum('hours');
+                            $sum = collect($monthData['days'])->where('raw_code', 'S')->sum('hours');
                         @endphp
                         {{ $sum > 0 ? $sum : '' }}
                     </td>
