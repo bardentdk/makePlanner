@@ -42,19 +42,16 @@
 <body>
     
     @php
-        // --- 1. PRE-CALCULS GLOBAUX ROBUSTES ---
         $allDays = collect($grid)->pluck('days')->flatten();
 
-        // Total Centre = Heures numériques (ex: 7, 4) + Codes RS + R
+        // Total Global : C + RS uniquement (Plus de R)
         $totalGlobalCentre = $allDays->reduce(function($carry, $day) {
             if (empty($day->content)) return $carry;
-            
-            // On récupère la valeur numérique brute stockée par le Service
             $h = $day->hours ?? 0;
             $code = $day->raw_code ?? $day->content;
 
-            // On additionne si c'est C (Cours), RS (Recherche) ou R (Révisions)
-            if (in_array($code, ['C', 'RS', 'R']) || is_numeric($day->content)) {
+            // On retire 'R' ici aussi
+            if (in_array($code, ['C', 'RS'])) {
                 return $carry + $h;
             }
             return $carry;
@@ -122,17 +119,16 @@
             </tr>
 
             {{-- 1. LIGNE : H. CENTRE (Total Bleu) --}}
-            {{-- Celle-ci englobe C + R + RS pour le total, car ce sont des heures payées centre --}}
             <tr>
                 @foreach($grid as $monthData)
                     <td colspan="2" class="footer-label">H. CENTRE</td>
                     <td class="footer-val bg-centre">
                         @php
-                            // On additionne TOUT ce qui est fait au centre (C, RS, R)
+                            // MODIFICATION ICI : On ne compte que C (Cours) et RS (Recherche)
+                            // On a retiré 'R' de ce tableau
                             $sum = collect($monthData['days'])->reduce(function($c, $d) {
                                 $code = $d->raw_code ?? $d->content;
-                                // Si c'est C, RS, R ou un chiffre -> On compte
-                                return (in_array($code, ['C', 'RS', 'R']) || is_numeric($d->content)) 
+                                return (in_array($code, ['C', 'RS']) || (is_numeric($d->content) && $code !== 'R')) 
                                        ? $c + ($d->hours ?? 0) 
                                        : $c;
                             }, 0);

@@ -48,13 +48,13 @@ class ExportPlanningXlsxAction implements WithTitle, WithEvents
                 $sheet->getDefaultRowDimension()->setRowHeight(15);
                 $sheet->getColumnDimension('A')->setWidth(25); // Colonne des jours
 
-                // --- 2. CALCULS GLOBAUX (Identiques au PDF) ---
+                // --- 2. CALCULS GLOBAUX ---
                 $allDays = collect($this->grid)->pluck('days')->flatten();
                 
-                // Total Centre = C + R + RS
+                // MODIFICATION : On retire 'R'
                 $totalGlobalCentre = $allDays->filter(function($d) {
                     $code = $d->raw_code ?? '';
-                    return in_array($code, ['C', 'R', 'RS']);
+                    return in_array($code, ['C', 'RS']); // R retiré
                 })->sum('hours');
 
                 // Total Stage = S
@@ -157,7 +157,7 @@ class ExportPlanningXlsxAction implements WithTitle, WithEvents
                     $daysCol = collect($monthData['days']);
 
                     // A. Ligne H. CENTRE (Bleu) -> Somme C + R + RS
-                    $sumCentre = $daysCol->filter(fn($d) => in_array($d->raw_code ?? '', ['C', 'R', 'RS']))->sum('hours');
+                    $sumCentre = $daysCol->filter(fn($d) => in_array($d->raw_code ?? '', ['C', 'RS']))->sum('hours');
                     $sheet->setCellValue("{$colContent}{$rowFooter}", $sumCentre > 0 ? $sumCentre : '');
                     $sheet->getStyle("{$colContent}{$rowFooter}")->applyFromArray(['font' => ['bold' => true], 'fill' => ['fillType' => Fill::FILL_SOLID, 'startColor' => ['argb' => 'FFDBEAFE']], 'borders' => ['allBorders' => ['borderStyle' => Border::BORDER_THIN]]]);
                     

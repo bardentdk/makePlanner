@@ -13,60 +13,50 @@ class AutoSchedulerService
         $currentDate = $startDate->copy();
 
         // --- CONFIGURATION ---
-        
-        // 1. Calcul du quota d'heures par stage
         $heuresParStage = $nbStages > 0 ? ceil($targetHeuresStage / $nbStages) : 0;
-        
-        // 2. Déclenchement du stage (après 40% du parcours théorique réalisé)
         $ratioDeclenchement = 0.4; 
 
         // Compteurs
-        $compteurCentre = 0;      // Englobe : Cours (C) + Révisions (R) + Recherche (RS)
-        $compteurStageTotal = 0;  // Englobe : Stage (S) uniquement
+        $compteurCentre = 0;      // Englobe : Cours (C) + Recherche (RS). PAS les révisions.
+        $compteurStageTotal = 0;  // S uniquement
         
-        $stagesRealises = 0;      // Combien de périodes de stage ont été terminées ?
-        $compteurStageActuel = 0; // Avancement dans la période de stage en cours
-        $enModeStage = false;     // Est-ce qu'on est actuellement en stage ?
+        $stagesRealises = 0;      
+        $compteurStageActuel = 0; 
+        $enModeStage = false;     
 
         $maxDays = 2000; 
         $d = 0;
 
-        // BOUCLE PRINCIPALE : TANT QU'IL RESTE DES HEURES À PLACER
+        // --- BOUCLE PRINCIPALE : ON PLACE LES COURS ET STAGES ---
         while (($compteurCentre < $targetHeuresCentre || $compteurStageTotal < $targetHeuresStage) && $d < $maxDays) {
             $d++;
 
-            // A. GESTION WEEK-END
+            // 1. Week-end
             if ($currentDate->isWeekend()) {
                 $currentDate->addDay();
                 continue;
             }
 
-            // B. GESTION FÉRIÉ (Prioritaire sur tout)
+            // 2. Férié
             if (HolidayHelper::isHoliday($currentDate)) {
-                $phases[] = $this->createPhase($currentDate, 'F', 0, '#70AD47'); // Vert Férié
+                $phases[] = $this->createPhase($currentDate, 'F', 0, '#70AD47');
                 $currentDate->addDay();
                 continue;
             }
 
-            // --- LOGIQUE DU STAGE ---
-            
-            // Si on est DÉJÀ dans un stage
+            // --- STAGE ---
             if ($enModeStage) {
-                // Vérifie si le stage est fini (soit ce bloc, soit le total)
                 if ($compteurStageActuel >= $heuresParStage || $compteurStageTotal >= $targetHeuresStage) {
-                    $enModeStage = false; // Fin du stage, retour au centre
+                    $enModeStage = false; 
                     $stagesRealises++;
                     $compteurStageActuel = 0;
-                    // On n'avance pas la date, on laisse la boucle traiter le retour au centre immédiatement
                     continue; 
                 } else {
-                    // On pose une journée de STAGE
                     $resteBloc = $heuresParStage - $compteurStageActuel;
                     $resteTotal = $targetHeuresStage - $compteurStageTotal;
                     $h = min(7, $resteBloc, $resteTotal);
 
-                    $phases[] = $this->createPhase($currentDate, 'S', $h, '#FCE4D6'); // Rose
-                    
+                    $phases[] = $this->createPhase($currentDate, 'S', $h, '#FCE4D6');
                     $compteurStageTotal += $h;
                     $compteurStageActuel += $h;
                     $currentDate->addDay();
@@ -74,11 +64,8 @@ class AutoSchedulerService
                 }
             }
 
-            // Si on doit DÉCLENCHER un nouveau stage
-            // Règle : Il reste des stages à faire ET on a assez avancé dans les cours
+            // --- DÉCLENCHEMENT STAGE ---
             $seuilDeclenchement = $targetHeuresCentre * ($ratioDeclenchement * ($stagesRealises + 1));
-            
-            // Sécurité : Si on a fini tous les cours mais qu'il reste du stage, on force le départ
             $forceStage = ($compteurCentre >= $targetHeuresCentre && $stagesRealises < $nbStages);
 
             if (!$enModeStage && $stagesRealises < $nbStages && ($compteurCentre >= $seuilDeclenchement || $forceStage)) {
@@ -86,25 +73,17 @@ class AutoSchedulerService
                 continue; 
             }
 
-            // --- LOGIQUE DU CENTRE (Cours, Recherche, Révisions) ---
-            
+            // --- CENTRE (Cours & Recherche) ---
             if ($compteurCentre < $targetHeuresCentre) {
                 $h = min(7, $targetHeuresCentre - $compteurCentre);
                 
-                // 1. EST-CE DES RÉVISIONS ? (Les 70 dernières heures du parcours)
-                $resteAFaire = $targetHeuresCentre - $compteurCentre;
+                // Ici, on ne gère PLUS les révisions. On remplit jusqu'au bout.
                 
-                if ($resteAFaire <= 70) {
-                     // C'est la toute fin : RÉVISIONS
-                     $phases[] = $this->createPhase($currentDate, 'R', $h, '#BBF7D0'); // Vert Clair
-                }
-                // 2. EST-CE DE LA RECHERCHE DE STAGE ? 
-                // Condition : C'est un Lundi ET il reste des stages à passer dans le futur
-                elseif ($currentDate->isMonday() && $stagesRealises < $nbStages) {
-                     // C'est un lundi avant-stage : RECHERCHE
+                // Recherche de Stage (RS) : Lundis + Reste des stages
+                if ($currentDate->isMonday() && $stagesRealises < $nbStages) {
                      $phases[] = $this->createPhase($currentDate, 'RS', $h, '#E2D0F9'); // Mauve
                 }
-                // 3. SINON : COURS STANDARD
+                // Cours Standard (C)
                 else {
                      $phases[] = $this->createPhase($currentDate, 'C', $h, '#DBEAFE'); // Bleu
                 }
@@ -112,44 +91,62 @@ class AutoSchedulerService
                 $compteurCentre += $h;
                 $currentDate->addDay();
             } else {
-                // Plus rien à placer -> Fin du planning
-                break;
+                break; // Fini pour les heures payées
             }
         }
 
+        // --- NOUVEAU : GESTION DES RÉVISIONS (FIN DE MOIS) ---
+        // Une fois la formation finie, si le mois n'est pas terminé, on comble avec des révisions.
+        // On recule d'un jour car la boucle while a fait un addDay() de trop à la fin
+        
+        // La date actuelle est le lendemain de la fin de formation.
+        // Si ce jour est toujours dans le même mois que la veille (ou si le mois n'est pas fini)
+        
+        // On prend la date de fin réelle des cours
+        $finFormation = $currentDate->copy(); 
+        
+        // On regarde la fin du mois de cette date de fin
+        $finDuMois = $currentDate->copy()->endOfMonth();
+
+        // Tant que 'currentDate' est <= finDuMois, on ajoute des révisions
+        // Attention : Si la formation finit le 31, cette boucle ne s'exécute pas (c'est ce qu'on veut)
+        while ($currentDate->lte($finDuMois)) {
+            
+            if ($currentDate->isWeekend()) {
+                $currentDate->addDay(); 
+                continue; 
+            }
+            
+            if (HolidayHelper::isHoliday($currentDate)) {
+                $phases[] = $this->createPhase($currentDate, 'F', 0, '#70AD47');
+                $currentDate->addDay();
+                continue;
+            }
+
+            // On ajoute une phase "R" (Révisions)
+            // Indépendant des heures centre -> On met 7h par défaut
+            $phases[] = $this->createPhase($currentDate, 'R', 7, '#BBF7D0'); // Vert
+            
+            $currentDate->addDay();
+        }
+
         return [
+            // On retourne la date de fin incluant les révisions potentielles
             'end_date' => $currentDate->subDay()->format('Y-m-d'),
             'phases' => $phases
         ];
     }
 
     private function createPhase($date, $code, $hours, $color) {
-        $content = $code;
-        
-        // AFFICHAGE :
-        // Si c'est C (Cours) ou R (Révisions) -> On affiche le chiffre (ex: 7).
-        // Si c'est RS (Recherche), S (Stage), F (Férié) -> On affiche le CODE texte.
-        if ($hours > 0 && ($code === 'C' || $code === 'R')) {
-            $content = $hours; 
-        }
+        // Cette fonction reste inchangée par rapport à la dernière version
         return [
             'start_date' => $date->format('Y-m-d'),
             'end_date' => $date->format('Y-m-d'),
-            'code' => $code,             // On garde 'R', 'C', 'RS'... (Crucial pour le PDF)
+            'code' => $code,             
             'hours' => $hours,           
             'color' => $color,
             'hours_per_day' => $hours,
             'priority' => 10
         ];
-        // return [
-        //     'start_date' => $date->format('Y-m-d'),
-        //     'end_date' => $date->format('Y-m-d'),
-        //     'code' => $content,          // Visuel (ex: "7", "RS")
-        //     'raw_code' => $code,         // Technique (C, R, RS...) -> Sert au calcul PDF
-        //     'hours' => $hours,           // Valeur Math
-        //     'color' => $color,
-        //     'hours_per_day' => $hours,
-        //     'priority' => 10
-        // ];
     }
 }
