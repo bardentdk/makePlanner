@@ -129,52 +129,48 @@ class PlanningController extends Controller
     // Dans la méthode store()
     public function store(Request $request)
     {
-        // 1. Validation des données
         $validated = $request->validate([
             'training_id'   => 'required|exists:trainings,id',
             'start_date'    => 'required|date',
             'nombre_stages' => 'required|integer|min:0',
-            // On accepte une valeur manuelle pour les heures, sinon on la calculera
             'heures_stage'  => 'nullable|integer|min:0', 
         ]);
 
-        // 2. Récupération de la formation catalogue
         $training = Training::findOrFail($validated['training_id']);
 
-        // 3. Détermination des heures de stage exactes
-        // Si l'utilisateur a rempli le champ "heures_stage", on prend ça.
-        // Sinon, on prend le nombre de semaines du catalogue * 35.
+        // Calcul des heures (manuel ou auto)
         $heuresStageStrictes = $validated['heures_stage'] ?? ($training->internship_weeks * 35);
 
-        // 4. Transaction pour création et calcul
-        $planning = DB::transaction(function () use ($training, $validated, $heuresStageStrictes) {
+        // Récupération des Règles de la Formation (JSON)
+        // On fusionne avec des valeurs par défaut au cas où le JSON est vide
+        $rules = $training->scheduling_rules ?? [];
+        
+        // Sécurité : Si le formulaire Planning demande un nb de stage différent de la config Training,
+        // on garde le nb du formulaire mais on essaie d'appliquer les délais du Training.
+
+        $planning = DB::transaction(function () use ($training, $validated, $heuresStageStrictes, $rules) {
             
-            // Création de l'objet Planning
             $planning = new Planning();
             $planning->title = $training->title;
             $planning->start_date = Carbon::parse($validated['start_date']);
-            
-            // On stocke les valeurs de référence
             $planning->heures_centre = $training->duration_hours;
-            $planning->heures_stage = $heuresStageStrictes; // On sauvegarde l'heure stricte
-            
-            // Sauvegarde initiale (pour avoir l'ID)
+            $planning->heures_stage = $heuresStageStrictes;
+            // On peut aussi stocker les règles dans le planning pour historique si besoin
+            $planning->rules = $rules; 
             $planning->save();
 
-            // Préparation des données pour le moteur de calcul
             $calculationData = [
                 'heures_centre' => $training->duration_hours,
-                'heures_stage'  => $heuresStageStrictes, // On passe 200 (ou autre) directement
+                'heures_stage'  => $heuresStageStrictes,
                 'nombre_stages' => $validated['nombre_stages'],
+                'rules'         => $rules, // <--- ON PASSE LES RÈGLES ICI
             ];
 
-            // Lancement du calcul des phases
             $this->calculateAndSavePhases($planning, $calculationData);
 
-            return $planning; // On retourne l'objet pour la redirection
+            return $planning;
         });
 
-        // 5. Redirection vers le planning créé
         return redirect()->route('plannings.show', $planning)
                          ->with('success', 'Planning généré avec succès !');
     }
@@ -229,30 +225,29 @@ class PlanningController extends Controller
      */
     private function calculateAndSavePhases(Planning $planning, array $data)
     {
-        // A. APPEL DU SERVICE (Moteur de calcul strict)
-        // On passe directement les heures (ex: 637h centre, 200h stage)
+        // On passe les règles au service
+        $rules = $data['rules'] ?? [];
+
         $result = $this->scheduler->calculateStrictPlanning(
             $planning->start_date,
             $data['heures_centre'], 
             $data['heures_stage'],   
-            $data['nombre_stages']   
+            $data['nombre_stages'],
+            $rules // <--- NOUVEL ARGUMENT
         );
 
-        // B. MISE A JOUR DE LA DATE DE FIN
         $planning->end_date = $result['end_date'];
         $planning->save();
 
-        // C. INSERTION DES PHASES EN BASE DE DONNÉES
         foreach ($result['phases'] as $phaseData) {
             $planning->phases()->create([
                 'name'          => $phaseData['name'] ?? 'Phase',
-                'code'          => $phaseData['code'],           // Ce qui s'affiche (S, 7, 4...)
+                'code'          => $phaseData['code'],
                 'start_date'    => $phaseData['start_date'],
                 'end_date'      => $phaseData['end_date'],
                 'color'         => $phaseData['color'],
-                'hours_per_day' => $phaseData['hours'],          // La valeur mathématique (pour les totaux)
+                'hours_per_day' => $phaseData['hours'],
                 'priority'      => $phaseData['priority'] ?? 10,
-                // 'raw_code'   => $phaseData['raw_code'] ?? null // (Optionnel si vous l'avez ajouté)
             ]);
         }
     }
